@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Firebase Chatroom</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <h1>🂱𝐏𝐀𝐈𝐃ᴥ︎︎︎𝐓𝐄𝐂𝐇ᴥ︎︎︎𝐙𝐎𝐍𝐄🂱</h1>
+  
+  <!-- Phone auth -->
+  <div id="login">
+    <input type="text" id="phone" placeholder="+1234567890">
+    <div id="recaptcha-container"></div>
+    <button onclick="sendCode()">Send Code</button>
+    <input type="text" id="code" placeholder="Enter Code">
+    <button onclick="verifyCode()">Verify</button>
+  </div>
+
+  <!-- Chat area -->
+  <div id="chat" style="display:none;">
+    <p>Welcome, <span id="userPhone"></span></p>
+    <button onclick="createGroup()">Create Group</button>
+    <input type="text" id="groupName" placeholder="Group Name">
+    
+    <div id="onlineUsers"></div>
+    <div id="messages"></div>
+    <input id="message" placeholder="Type message...">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+
+  <script>
+    // Firebase Config (replace with your own)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "SENDER_ID",
+      appId: "APP_ID",
+      databaseURL: "https://YOUR_PROJECT.firebaseio.com"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const rtdb = firebase.database();
+
+    let currentUser = null;
+
+    // Phone Auth
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container');
+
+    function sendCode() {
+      const phone = document.getElementById("phone").value;
+      auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
+        .then(conf => {
+          window.confirmationResult = conf;
+          alert("Code sent!");
+        }).catch(console.error);
+    }
+
+    function verifyCode() {
+      const code = document.getElementById("code").value;
+      window.confirmationResult.confirm(code)
+        .then(result => {
+          currentUser = result.user;
+          document.getElementById("userPhone").innerText = currentUser.phoneNumber;
+          document.getElementById("login").style.display = "none";
+          document.getElementById("chat").style.display = "block";
+
+          setPresence(true);
+          loadOnlineUsers();
+          loadMessages();
+        }).catch(console.error);
+    }
+
+    function setPresence(isOnline) {
+      const userRef = rtdb.ref("/presence/" + currentUser.uid);
+      if (isOnline) {
+        userRef.set({ phone: currentUser.phoneNumber, online: true });
+        userRef.onDisconnect().remove();
+      }
+    }
+
+    function loadOnlineUsers() {
+      rtdb.ref("/presence").on("value", snap => {
+        const users = snap.val();
+        const el = document.getElementById("onlineUsers");
+        el.innerHTML = "<h3>Online Users</h3>";
+        for (const uid in users) {
+          if (uid !== currentUser.uid) {
+            const user = users[uid];
+            const btn = document.createElement("button");
+            btn.innerText = user.phone;
+            btn.onclick = () => startPrivateChat(uid, user.phone);
+            el.appendChild(btn);
+          }
+        }
+      });
+    }
+
+    function sendMessage() {
+      const text = document.getElementById("message").value;
+      db.collection("messages").add({
+        from: currentUser.phoneNumber,
+        text,
+        time: Date.now()
+      });
+      document.getElementById("message").value = '';
+    }
+
+    function loadMessages() {
+      db.collection("messages").orderBy("time").onSnapshot(snapshot => {
+        const msgDiv = document.getElementById("messages");
+        msgDiv.innerHTML = '';
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const p = document.createElement("p");
+          p.textContent = `${data.from}: ${data.text}`;
+          msgDiv.appendChild(p);
+        });
+      });
+    }
+
+    function startPrivateChat(uid, phone) {
+      alert("Starting private chat with " + phone + " (feature coming soon)");
+      // You can store private messages as: messages/private/{user1_uid}_{user2_uid}
+    }
+
+    function createGroup() {
+      const name = document.getElementById("groupName").value;
+      if (!name) return;
+      db.collection("groups").add({
+        name,
+        owner: currentUser.uid,
+        members: [currentUser.uid]
+      }).then(() => alert("Group created!"));
+    }
+
+  </script>
+</body>
+</html>
